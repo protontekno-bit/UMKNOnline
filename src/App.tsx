@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { MenuItem, CartItem, Order, CategoryId, SortOption, NavTab, DeliveryAddress, PaymentSettings, PaymentMethodType } from './types';
+import { MenuItem, CartItem, Order, OrderStatus, CategoryId, SortOption, NavTab, DeliveryAddress, PaymentSettings, PaymentMethodType } from './types';
 import { MENU_ITEMS, SAVED_ADDRESSES, INITIAL_ORDERS, DEFAULT_PAYMENT_SETTINGS } from './data/menuData';
 import { Navbar } from './components/Navbar';
 import { BottomNav } from './components/BottomNav';
@@ -12,12 +12,21 @@ import { FavoritesView } from './components/FavoritesView';
 import { ProfileView } from './components/ProfileView';
 import { AddressModal } from './components/AddressModal';
 import { AdminSettingsModal } from './components/AdminSettingsModal';
+import { AdminPortal } from './components/AdminPortal';
+import { AdminAuthModal } from './components/AdminAuthModal';
 import { PaymentModal } from './components/PaymentModal';
 import { Toast, ToastMessage } from './components/Toast';
 import { formatCurrency } from './utils/formatters';
-import { Search, ShoppingBag, Sparkles, X, ChevronRight } from 'lucide-react';
+import { Search, ShoppingBag, Sparkles, X, ChevronRight, Lock } from 'lucide-react';
 
 export default function App() {
+  // Portal Mode: Separated Customer Portal vs Admin Back-Office Portal
+  const [portalMode, setPortalMode] = useState<'customer' | 'admin'>('customer');
+  const [isAdminAuthOpen, setIsAdminAuthOpen] = useState(false);
+
+  // Dynamic Menu Items (can be modified by Admin)
+  const [menuList, setMenuList] = useState<MenuItem[]>(MENU_ITEMS);
+
   // Navigation & View State
   const [currentTab, setCurrentTab] = useState<NavTab>('explore');
   const [activeAddress, setActiveAddress] = useState<DeliveryAddress>(SAVED_ADDRESSES[0]);
@@ -287,9 +296,39 @@ export default function App() {
     showToast(`${order.items.length} item dimasukkan ke keranjang`, 'success');
   };
 
+  // Admin handlers
+  const handleUpdateMenuPrice = (itemId: number, newPrice: number) => {
+    setMenuList((prev) =>
+      prev.map((item) => (item.id === itemId ? { ...item, price: newPrice } : item))
+    );
+  };
+
+  const handleToggleMenuAvailability = (itemId: number) => {
+    setMenuList((prev) =>
+      prev.map((item) => {
+        if (item.id === itemId) {
+          const isCurrentlyAvailable = !item.tags.includes('Habis');
+          const nextTags = isCurrentlyAvailable
+            ? [...item.tags, 'Habis']
+            : item.tags.filter((t) => t !== 'Habis');
+          return { ...item, tags: nextTags };
+        }
+        return item;
+      })
+    );
+    showToast('Status ketersediaan menu diperbarui!', 'info');
+  };
+
+  const handleUpdateOrderStatus = (orderId: string, newStatus: OrderStatus) => {
+    setOrders((prev) =>
+      prev.map((ord) => (ord.id === orderId ? { ...ord, status: newStatus } : ord))
+    );
+    showToast(`Status pesanan ${orderId} berhasil diubah!`, 'success');
+  };
+
   // Filtered & Sorted Menu
   const filteredProducts = useMemo(() => {
-    let result = [...MENU_ITEMS];
+    let result = [...menuList];
 
     // Category
     if (selectedCategory !== 'all') {
@@ -340,6 +379,26 @@ export default function App() {
     return result;
   }, [selectedCategory, searchQuery, showPromoOnly, showPopularOnly, selectedSort]);
 
+  // If Admin Portal Mode is active, render full-screen Admin Back-Office
+  if (portalMode === 'admin') {
+    return (
+      <>
+        <Toast toast={toast} onClose={() => setToast(null)} />
+        <AdminPortal
+          orders={orders}
+          menuItems={menuList}
+          paymentSettings={paymentSettings}
+          onSavePaymentSettings={handleSavePaymentSettings}
+          onUpdateOrderStatus={handleUpdateOrderStatus}
+          onUpdateMenuPrice={handleUpdateMenuPrice}
+          onToggleMenuAvailability={handleToggleMenuAvailability}
+          onExitAdmin={() => setPortalMode('customer')}
+          onShowToast={showToast}
+        />
+      </>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#FAF8F5] flex flex-col text-stone-900 pb-20 md:pb-10 selection:bg-amber-200">
       {/* Toast Feedback */}
@@ -353,7 +412,7 @@ export default function App() {
         cartTotal={cartTotal}
         onOpenCart={() => setIsCartOpen(true)}
         onOpenAddressModal={() => setIsAddressModalOpen(true)}
-        onOpenAdmin={() => setIsAdminOpen(true)}
+        onOpenAdmin={() => setIsAdminAuthOpen(true)}
         activeAddress={activeAddress}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
@@ -482,7 +541,7 @@ export default function App() {
         {currentTab === 'favorites' && (
           <FavoritesView
             favoriteIds={favoriteIds}
-            menuItems={MENU_ITEMS}
+            menuItems={menuList}
             onSelectItem={setSelectedProductDetail}
             onQuickAdd={handleQuickAdd}
             onToggleFavorite={handleToggleFavorite}
@@ -505,7 +564,7 @@ export default function App() {
           <ProfileView
             addresses={addresses}
             onOpenAddressModal={() => setIsAddressModalOpen(true)}
-            onOpenAdmin={() => setIsAdminOpen(true)}
+            onOpenAdmin={() => setIsAdminAuthOpen(true)}
             onApplyVoucherCode={(code) => {
               setIsCartOpen(true);
             }}
@@ -513,6 +572,23 @@ export default function App() {
           />
         )}
       </main>
+
+      {/* Customer Portal Footer with Discrete Back-Office Portal Entry */}
+      <footer className="mt-12 py-6 border-t border-stone-200/80 bg-white/60 text-center text-xs text-stone-500">
+        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="font-extrabold text-stone-900">YumYum Express</span>
+            <span>· Portal Pemesanan Makanan Online</span>
+          </div>
+          <button
+            onClick={() => setIsAdminAuthOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-stone-600 hover:text-stone-900 hover:bg-stone-100 transition-colors font-medium"
+          >
+            <Lock className="w-3.5 h-3.5 text-stone-400" />
+            <span>Portal Khusus Kasir & Admin Resto</span>
+          </button>
+        </div>
+      </footer>
 
       {/* FLOATING QUICK CART PILL ON SMARTPHONES (When browsing menu with items in cart) */}
       {cartCount > 0 && currentTab === 'explore' && !isCartOpen && (
@@ -581,6 +657,14 @@ export default function App() {
         onAddNewAddress={(newAddr) => {
           setAddresses((prev) => [newAddr, ...prev]);
         }}
+      />
+
+      {/* Admin Security PIN Authentication Modal */}
+      <AdminAuthModal
+        isOpen={isAdminAuthOpen}
+        onClose={() => setIsAdminAuthOpen(false)}
+        onSuccess={() => setPortalMode('admin')}
+        onShowToast={showToast}
       />
 
       {/* Admin Settings Modal (Dashboard Admin Pembayaran) */}
