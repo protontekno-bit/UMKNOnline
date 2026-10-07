@@ -1,0 +1,6 @@
+{
+  "name": "YumYum Food Delivery",
+  "description": "Aplikasi pesan makanan online yang mobile-responsive, cepat, dan intuitif untuk semua perangkat smartphone, tablet, dan desktop.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
